@@ -93,23 +93,27 @@ async def run_scraper(urls_to_crawl):
 def upload_to_drive(file_path):
     print(f"☁️ 正在同步至 Google Drive...")
     try:
-        # 1. 从当前目录加载被还原出来的 token.pickle
+        # 1. 加载通行证
         with open('token.pickle', 'rb') as token:
             creds = pickle.load(token)
         
-        # 2. 🌟 修复后的逻辑：如果 token 过期则自动刷新
+        # 2. 如果过期则刷新
         if creds and creds.expired and creds.refresh_token:
             from google.auth.transport.requests import Request
             creds.refresh(Request())
             with open('token.pickle', 'wb') as token:
                 pickle.dump(creds, token)
 
-        # 3. 构建服务并上传
+        # 3. 执行上传
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
         service = build('drive', 'v3', credentials=creds)
         file_metadata = {'name': os.path.basename(file_path), 'parents': [FOLDER_ID]}
         media = MediaFileUpload(file_path, mimetype='application/json')
         service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         print(f"🎉 云端同步圆满成功！")
+        
+    except Exception as e:
 if __name__ == "__main__":
     asyncio.run(main())
     
