@@ -93,8 +93,22 @@ async def run_scraper(urls_to_crawl):
 def upload_to_drive(file_path):
     print(f"☁️ 正在同步至 Google Drive...")
     try:
-        # 直接从当前目录加载被 GitHub Action 还原出来的 token.pickle
+        # 1. 从当前目录加载被还原出来的 token.pickle
         with open('token.pickle', 'rb') as token:
             creds = pickle.load(token)
         
-        if creds and creds.expired and cred
+        # 2. 🌟 修复后的逻辑：如果 token 过期则自动刷新
+        if creds and creds.expired and creds.refresh_token:
+            from google.auth.transport.requests import Request
+            creds.refresh(Request())
+            with open('token.pickle', 'wb') as token:
+                pickle.dump(creds, token)
+
+        # 3. 构建服务并上传
+        service = build('drive', 'v3', credentials=creds)
+        file_metadata = {'name': os.path.basename(file_path), 'parents': [FOLDER_ID]}
+        media = MediaFileUpload(file_path, mimetype='application/json')
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        print(f"🎉 云端同步圆满成功！")
+    except Exception as e:
+        print(f"❌ 上传失败: {e}")
