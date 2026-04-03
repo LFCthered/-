@@ -32,20 +32,39 @@ def sanitize_filename(name):
     return re.sub(r'[\\/:*?"<>|]', '_', name)
 
 # ==========================================
-# 🕷️ 模块 1: 深度抓取引擎
+# 🕷️ 模块 1: 深度抓取引擎 (潜行增强版)
 # ==========================================
 async def run_scraper(urls_to_crawl):
-    print(f"📡 GitHub 节点启动，目标数量: {len(urls_to_crawl)}")
+    print(f"📡 GitHub 潜行节点启动，目标数量: {len(urls_to_crawl)}")
+    
+    # 🌟 增加伪装：随机模拟真实的浏览器头
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    ]
+
     crawler = PlaywrightCrawler(
-        request_handler_timeout=timedelta(seconds=300),
-        max_request_retries=2,
-        headless=True  # ☁️ 云端运行必须开启无头模式
+        request_handler_timeout=timedelta(seconds=60), # 缩短超时，快速重试
+        max_request_retries=5, # 增加重试次数
+        headless=True,
+        # 🌟 关键：禁用自动化特征，减少被识别的风险
+        browser_type='chromium',
+        playwright_launch_options={
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox"
+            ]
+        }
     )
 
     @crawler.router.default_handler
     async def request_handler(context: PlaywrightCrawlingContext):
         page, url = context.page, context.request.url
         all_data = {"chartAll": [], "chipData": None, "details": None}
+        
+        # 🌟 设置随机 User-Agent
+        await page.set_extra_http_headers({"User-Agent": random.choice(user_agents)})
         
         async def handle_response(res):
             try:
@@ -57,25 +76,24 @@ async def run_scraper(urls_to_crawl):
         page.on("response", handle_response)
         
         try:
-            await page.goto(url, wait_until='networkidle')
-            await page.wait_for_timeout(5000)
+            # 🌟 增加随机等待，模拟人类行为
+            await asyncio.sleep(random.uniform(2, 5))
             
-            # 点击筹码图
-            btn = page.get_by_text(re.compile(r"筹码.*图"), exact=False).first
-            if await btn.count() > 0:
-                await btn.click(force=True)
-                await page.wait_for_timeout(2000)
-                
-                # 模拟拖拽解锁长周期历史 (为了获取更多筹码数据)
-                chart = page.locator('canvas').first 
-                if await chart.is_visible():
-                    box = await chart.bounding_box()
-                    sx, sy = box['x'] + box['width'] * 0.8, box['y'] + box['height'] / 2
-                    for _ in range(3):
-                        await page.mouse.move(sx, sy); await page.mouse.down()
-                        await page.mouse.move(sx + 350, sy, steps=15); await page.mouse.up()
-                        await asyncio.sleep(1.5)
+            # 🌟 使用 'commit' 或 'domcontentloaded'，有时比 'networkidle' 更不容易超时
+            await page.goto(url, wait_until='domcontentloaded', timeout=60000)
             
+            # 等待关键元素加载
+            await page.wait_for_timeout(8000) 
+            
+            # 点击筹码图 (如果按钮没出来，可能被拦截了)
+            try:
+                btn = page.get_by_text(re.compile(r"筹码.*图"), exact=False).first
+                if await btn.is_visible():
+                    await btn.click(force=True)
+                    await page.wait_for_timeout(3000)
+            except:
+                print(f"⚠️ 无法点击筹码按钮: {url} (可能被拦截)")
+
             info = all_data.get("details", {}).get("data", {}).get("goods_info", {})
             item_name = info.get("name") or f"ID_{url.split('/')[-1]}"
             
@@ -83,11 +101,11 @@ async def run_scraper(urls_to_crawl):
             with open(save_path, "w", encoding="utf-8") as f:
                 json.dump(all_data, f, ensure_ascii=False, indent=4)
             print(f"✅ 抓取成功: {item_name}")
+            
         except Exception as e:
-            print(f"❌ 抓取失败 {url}: {e}")
+            print(f"❌ 抓取过程中出错 {url}: {e}")
 
     await crawler.run(urls_to_crawl)
-
 # ==========================================
 # ☁️ 模块 2: 云端上传
 # ==========================================
