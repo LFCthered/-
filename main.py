@@ -110,5 +110,8 @@ def upload_to_drive(file_path):
         media = MediaFileUpload(file_path, mimetype='application/json')
         service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         print(f"🎉 云端同步圆满成功！")
+if __name__ == "__main__":
+    asyncio.run(main())
+    
     except Exception as e:
         print(f"❌ 上传失败: {e}")
