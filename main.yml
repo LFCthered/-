@@ -1,0 +1,36 @@
+name: CS2 Daily Auto Scraper
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # 🌟 每天北京时间 16:00 自动运行
+  workflow_dispatch:   # 🌟 允许你随时手动点击运行
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install crawlee playwright google-api-python-client google-auth-httplib2 google-auth-oauthlib httplib2 pysocks
+        playwright install chromium
+
+    - name: Restore Credentials
+      run: |
+        echo "${{ secrets.TOKEN_BASE64 }}" | base64 -d > token.pickle
+        # 如果代码里需要 client_secrets，也可以加上，但 token 通常足够
+
+    - name: Run Scraper
+      env:
+        DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+      run: |
+        python main.py
