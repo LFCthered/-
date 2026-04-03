@@ -5,7 +5,7 @@ import re
 import datetime
 import pickle
 import logging
-import random  # 🌟 补全这个漏掉的库
+import random
 from datetime import timedelta
 
 # 引入核心库
@@ -18,12 +18,10 @@ from google.auth.transport.requests import Request
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 # ==========================================
-# ⚙️ 配置区 (通过 GitHub Secrets 读取)
+# ⚙️ 配置区
 # ==========================================
 FOLDER_ID = os.environ.get('DRIVE_FOLDER_ID', '13Liug6iJ7Q--pap__sScCqP5kH8NpRvt')
 DATA_DIR = 'item_data_library'
-
-# 🌟 在这里填入你每天想固定监控的饰品 ID 列表
 TARGET_IDS = ["23199", "23200", "23198"] 
 
 if not os.path.exists(DATA_DIR):
@@ -33,22 +31,24 @@ def sanitize_filename(name):
     return re.sub(r'[\\/:*?"<>|]', '_', name)
 
 # ==========================================
-# 🕷️ 模块 1: 深度抓取引擎 (修正参数版)
+# 🕷️ 模块 1: 深度抓取引擎 (修正沙盒与参数)
 # ==========================================
 async def run_scraper(urls_to_crawl):
     print(f"📡 GitHub 潜行节点启动，目标数量: {len(urls_to_crawl)}")
     
-    # 🌟 准备一组真实的浏览器头，防止被秒杀
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
     ]
 
-    # 🌟 修正了 PlaywrightCrawler 的初始化方式
+    # 🌟 核心修复：添加 browser_launch_options 并传入 --no-sandbox
     crawler = PlaywrightCrawler(
         request_handler_timeout=timedelta(seconds=120),
         max_request_retries=5,
-        headless=True
+        headless=True,
+        browser_launch_options={
+            "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        }
     )
 
     @crawler.router.default_handler
@@ -73,8 +73,9 @@ async def run_scraper(urls_to_crawl):
             await asyncio.sleep(random.uniform(2, 5))
             
             # 访问页面，给足加载时间
+            print(f"🌐 正在访问: {url}")
             await page.goto(url, wait_until='domcontentloaded', timeout=60000)
-            await page.wait_for_timeout(10000) # 额外等10秒让AJAX飞一会儿
+            await page.wait_for_timeout(10000) 
             
             # 尝试点击筹码按钮
             try:
@@ -126,21 +127,23 @@ def upload_to_drive(file_path):
 def generate_report():
     reports = []
     if not os.path.exists(DATA_DIR): return None
-    for f in os.listdir(DATA_DIR):
-        if f.endswith('.json'):
-            file_path = os.path.join(DATA_DIR, f)
-            with open(file_path, 'r', encoding='utf-8') as j:
-                try:
-                    d = json.load(j)
-                    info = d.get("details", {}).get("data", {}).get("goods_info", {})
-                    if info.get("name"): # 确保只统计抓到数据的
-                        reports.append({
-                            "name": info.get("name"), 
-                            "price": info.get("buff_sell_price"), 
-                            "chips": d.get("chipData"),
-                            "timestamp": datetime.datetime.now().isoformat()
-                        })
-                except: pass
+    files = [f for f in os.listdir(DATA_DIR) if f.endswith('.json')]
+    if not files: return None
+
+    for f in files:
+        file_path = os.path.join(DATA_DIR, f)
+        with open(file_path, 'r', encoding='utf-8') as j:
+            try:
+                d = json.load(j)
+                info = d.get("details", {}).get("data", {}).get("goods_info", {})
+                if info and info.get("name"): 
+                    reports.append({
+                        "name": info.get("name"), 
+                        "price": info.get("buff_sell_price"), 
+                        "chips": d.get("chipData"),
+                        "timestamp": datetime.datetime.now().isoformat()
+                    })
+            except: pass
     
     if not reports: return None
     report_name = f"Daily_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json"
@@ -156,7 +159,7 @@ async def main():
         if report_file:
             upload_to_drive(report_file)
         else:
-            print("⚠️ 报告生成失败：可能所有请求都被屏蔽，或者未抓取到有效数据。")
+            print("⚠️ 报告生成失败：抓取到了页面但未提取到有效数据，或请求被拦截。")
 
 if __name__ == "__main__":
     asyncio.run(main())
