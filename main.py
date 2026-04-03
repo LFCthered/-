@@ -22,7 +22,7 @@ logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 # ==========================================
 FOLDER_ID = os.environ.get('DRIVE_FOLDER_ID', '13Liug6iJ7Q--pap__sScCqP5kH8NpRvt')
 DATA_DIR = 'item_data_library'
-TARGET_IDS = ["23199", "23200", "23198"] 
+TARGET_IDS = ["24845", "24808", "20225"，"24774","24770","24810","24761","20139","24776","20111","24765"] 
 
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
