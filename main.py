@@ -5,6 +5,7 @@ import re
 import datetime
 import pickle
 import logging
+import random  # 🌟 补全这个漏掉的库
 from datetime import timedelta
 
 # 引入核心库
@@ -22,7 +23,7 @@ logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 FOLDER_ID = os.environ.get('DRIVE_FOLDER_ID', '13Liug6iJ7Q--pap__sScCqP5kH8NpRvt')
 DATA_DIR = 'item_data_library'
 
-# 🌟 在这里填入你每天想固定监控的饰品 ID 列表 (示例为：薄荷、元勋、猩红头巾)
+# 🌟 在这里填入你每天想固定监控的饰品 ID 列表
 TARGET_IDS = ["23199", "23200", "23198"] 
 
 if not os.path.exists(DATA_DIR):
@@ -32,30 +33,22 @@ def sanitize_filename(name):
     return re.sub(r'[\\/:*?"<>|]', '_', name)
 
 # ==========================================
-# 🕷️ 模块 1: 深度抓取引擎 (潜行增强版)
+# 🕷️ 模块 1: 深度抓取引擎 (修正参数版)
 # ==========================================
 async def run_scraper(urls_to_crawl):
     print(f"📡 GitHub 潜行节点启动，目标数量: {len(urls_to_crawl)}")
     
-    # 🌟 增加伪装：随机模拟真实的浏览器头
+    # 🌟 准备一组真实的浏览器头，防止被秒杀
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
     ]
 
+    # 🌟 修正了 PlaywrightCrawler 的初始化方式
     crawler = PlaywrightCrawler(
-        request_handler_timeout=timedelta(seconds=60), # 缩短超时，快速重试
-        max_request_retries=5, # 增加重试次数
-        headless=True,
-        # 🌟 关键：禁用自动化特征，减少被识别的风险
-        browser_type='chromium',
-        playwright_launch_options={
-            "args": [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox"
-            ]
-        }
+        request_handler_timeout=timedelta(seconds=120),
+        max_request_retries=5,
+        headless=True
     )
 
     @crawler.router.default_handler
@@ -63,7 +56,7 @@ async def run_scraper(urls_to_crawl):
         page, url = context.page, context.request.url
         all_data = {"chartAll": [], "chipData": None, "details": None}
         
-        # 🌟 设置随机 User-Agent
+        # 随机设置一个 User-Agent
         await page.set_extra_http_headers({"User-Agent": random.choice(user_agents)})
         
         async def handle_response(res):
@@ -76,23 +69,21 @@ async def run_scraper(urls_to_crawl):
         page.on("response", handle_response)
         
         try:
-            # 🌟 增加随机等待，模拟人类行为
+            # 随机等待，像个人类在操作
             await asyncio.sleep(random.uniform(2, 5))
             
-            # 🌟 使用 'commit' 或 'domcontentloaded'，有时比 'networkidle' 更不容易超时
+            # 访问页面，给足加载时间
             await page.goto(url, wait_until='domcontentloaded', timeout=60000)
+            await page.wait_for_timeout(10000) # 额外等10秒让AJAX飞一会儿
             
-            # 等待关键元素加载
-            await page.wait_for_timeout(8000) 
-            
-            # 点击筹码图 (如果按钮没出来，可能被拦截了)
+            # 尝试点击筹码按钮
             try:
                 btn = page.get_by_text(re.compile(r"筹码.*图"), exact=False).first
                 if await btn.is_visible():
                     await btn.click(force=True)
                     await page.wait_for_timeout(3000)
             except:
-                print(f"⚠️ 无法点击筹码按钮: {url} (可能被拦截)")
+                pass
 
             info = all_data.get("details", {}).get("data", {}).get("goods_info", {})
             item_name = info.get("name") or f"ID_{url.split('/')[-1]}"
@@ -106,6 +97,7 @@ async def run_scraper(urls_to_crawl):
             print(f"❌ 抓取过程中出错 {url}: {e}")
 
     await crawler.run(urls_to_crawl)
+
 # ==========================================
 # ☁️ 模块 2: 云端上传
 # ==========================================
@@ -124,7 +116,7 @@ def upload_to_drive(file_path):
         file_metadata = {'name': os.path.basename(file_path), 'parents': [FOLDER_ID]}
         media = MediaFileUpload(file_path, mimetype='application/json')
         service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        print(f"🎉 云端同步圆满成功！文件名: {os.path.basename(file_path)}")
+        print(f"🎉 云端同步圆满成功！")
     except Exception as e:
         print(f"❌ 上传至云端失败: {e}")
 
@@ -141,12 +133,13 @@ def generate_report():
                 try:
                     d = json.load(j)
                     info = d.get("details", {}).get("data", {}).get("goods_info", {})
-                    reports.append({
-                        "name": info.get("name"), 
-                        "price": info.get("buff_sell_price"), 
-                        "chips": d.get("chipData"),
-                        "timestamp": datetime.datetime.now().isoformat()
-                    })
+                    if info.get("name"): # 确保只统计抓到数据的
+                        reports.append({
+                            "name": info.get("name"), 
+                            "price": info.get("buff_sell_price"), 
+                            "chips": d.get("chipData"),
+                            "timestamp": datetime.datetime.now().isoformat()
+                        })
                 except: pass
     
     if not reports: return None
@@ -163,7 +156,7 @@ async def main():
         if report_file:
             upload_to_drive(report_file)
         else:
-            print("⚠️ 未发现生成的本地数据，无法上传报告。")
+            print("⚠️ 报告生成失败：可能所有请求都被屏蔽，或者未抓取到有效数据。")
 
 if __name__ == "__main__":
     asyncio.run(main())
