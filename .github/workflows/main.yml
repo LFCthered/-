@@ -16,7 +16,7 @@ jobs:
           
       - name: Install Dependencies
         run: |
-          pip install crawlee playwright google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          pip install crawlee playwright browserforge google-api-python-client google-auth-httplib2 google-auth-oauthlib httplib2 pysocks
           playwright install chromium
 
       # 👇 就是这一步，负责把密码本复原
