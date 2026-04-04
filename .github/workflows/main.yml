@@ -13,13 +13,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install
+          
+      - name: Install Dependencies
         run: |
-          pip install crawlee playwright browserforge google-api-python-client google-auth-httplib2 google-auth-oauthlib httplib2 pysocks
+          pip install crawlee playwright google-api-python-client google-auth-httplib2 google-auth-oauthlib
           playwright install chromium
-      - name: Restore
+
+      # 👇 就是这一步，负责把密码本复原
+      - name: Restore Token
         run: echo "${{ secrets.TOKEN_BASE64 }}" | base64 -d > token.pickle
-      - name: Run
+
+      # 👇 紧接着运行你的爬虫脚本
+      - name: Run Scraper
         env:
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: python main.py
